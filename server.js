@@ -1,93 +1,149 @@
-constexpress=require("express");
-constmongoose=require("mongoose");
-constcors=require("cors");
+importReact, { useState, useEffect } from"react";
+importaxiosfrom"axios";
+import'bootstrap/dist/css/bootstrap.min.css';
+import'./App.css';
 
-constapp=express();
+constApp= () => {
+  const [tasks, setTasks] =useState([]);
+  const [title, setTitle] =useState("");
+  const [error, setError] =useState(null);
+  const [success, setSuccess] =useState(null);
 
-// Middleware
-app.use(cors()); // Enable CORS
-app.use(express.json()); // Parse incoming JSON requests
+  // Fetch tasks
+  constfetchTasks=async () => {
+    try {
+      constresponse=awaitaxios.get("http://localhost:5000/tasks");
+      setTasks(response.data);
+    } catch (err) {
+      setError("Could not fetch tasks.");
+      console.error(err);
+    }
+  };
 
-// Connect to MongoDB (change the connection string as needed)
-mongoose
-  .connect("mongodb://localhost:27017/taskmanager", {})
-  .then(() =>console.log("MongoDB connected"))
-  .catch((err) =>console.log("MongoDB connection error:", err));
+  useEffect(() => {
+    fetchTasks();
+  }, []);
 
-// Define Task Schema and Model
-constTaskSchema=newmongoose.Schema(
-  {
-    title:{ type:String, required:true },
-    status: {
-      type:String,
-      enum: ["Pending", "Ongoing", "Completed"],
-      default:"Pending",
-    },
-  },
-  { timestamps:true }
-); // Added timestamps for createdAt and updatedAt
+  // Create a new task
+  constcreateTask=async () => {
+    if(!title.trim()) {
+      setError("Task title cannot be empty.");
+      return;
+    }
+    try {
+      constresponse=awaitaxios.post("http://localhost:5000/tasks", { title });
+      setTasks([...tasks, response.data]);
+      setTitle(""); // Clear input
+      setError(null); // Clear error
+      setSuccess("Task created successfully!"); // Show success message
+      setTimeout(() =>setSuccess(null), 3000); // Clear success message after 3 seconds
+    } catch (err) {
+      setError("Could not create task.");
+      console.error(err);
+    }
+  };
 
-constTask=mongoose.model("Task", TaskSchema);
+  // Update task status
+  constupdateTaskStatus=async (id, newStatus) => {
+    try {
+      constresponse=awaitaxios.patch(`http://localhost:5000/tasks/${id}`, { status:newStatus });
+      setTasks(tasks.map(task=> (task._id===id?response.data:task))); // Update task in state
+      setSuccess("Task status updated successfully!");
+      setTimeout(() =>setSuccess(null), 3000); // Clear success message after 3 seconds
+    } catch (err) {
+      setError("Could not update task status.");
+      console.error(err);
+    }
+  };
 
-// Routes
-// Get all tasks
-app.get("/tasks", async (req, res) => {
-  try {
-    consttasks=awaitTask.find(); // Fetch all tasks from the database
-    res.json(tasks); // Send the tasks as JSON response
-  } catch (err) {
-    console.error("Error fetching tasks:", err);
-    res.status(500).json({ message:"Server error. Could not fetch tasks." });
-  }
-});
+  // Delete a task
+  constdeleteTask=async (id) => {
+    try {
+      awaitaxios.delete(`http://localhost:5000/tasks/${id}`);
+      setTasks(tasks.filter(task=>task._id!==id)); // Remove deleted task from state
+      setSuccess("Task deleted successfully!");
+      setTimeout(() =>setSuccess(null), 3000); // Clear success message after 3 seconds
+    } catch (err) {
+      setError("Could not delete task.");
+      console.error(err);
+    }
+  };
 
-// Create a new task
-app.post("/tasks", async (req, res) => {
-  const{ title } =req.body;
-  consttask=newTask({ title }); // Create a new task
-  try {
-    constnewTask=awaittask.save(); // Save task to the database
-    res.status(201).json(newTask); // Respond with the created task
-  } catch (err) {
-    console.error("Error creating task:", err);
-    res.status(400).json({ message:"Invalid data. Could not create task." });
-  }
-});
+  return (
+    <divclassName="container mt-5">
+      <h1className="text-center">Task Manager</h1>
 
-// Update task status
-app.patch("/tasks/:id", async (req, res) => {
-  const{ status } =req.body;
-  try {
-    constupdatedTask=awaitTask.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new:true }
-    ); // Update task and return the updated task
-    if(!updatedTask)
-      returnres.status(404).json({ message:"Task not found." });
-    res.json(updatedTask); // Respond with the updated task
-  } catch (err) {
-    console.error("Error updating task status:", err);
-    res
-      .status(500)
-      .json({ message:"Server error. Could not update task status." });
-  }
-});
+      {error&&<divclassName="alert alert-danger">{error}</div>}{/* Show error message */}
+      {success&&<divclassName="alert alert-success">{success}</div>}{/* Show success message */}
 
-// Delete a task by ID
-app.delete("/tasks/:id", async (req, res) => {
-  try {
-    constdeletedTask=awaitTask.findByIdAndDelete(req.params.id); // Find and delete the task
-    if(!deletedTask)
-      returnres.status(404).json({ message:"Task not found." });
-    res.json({ message:"Task deleted." }); // Respond with a success message
-  } catch (err) {
-    console.error("Error deleting task:", err);
-    res.status(500).json({ message:"Server error. Could not delete task." });
-  }
-});
+      <divclassName="input-group mb-3">
+        <input
+          type="text"
+          className="form-control"
+          value={title}
+          onChange={(e) =>setTitle(e.target.value)}
+          placeholder="Enter task title"
+        />
+        <buttonclassName="btnbtn-primary"onClick={createTask}>Add Task</button>
+      </div>
 
-// Server configuration
-constPORT=process.env.PORT||5000;
-app.listen(PORT, () =>console.log(`Server running on port ${PORT}`));
+      <divclassName="row">
+        {["Pending", "Ongoing", "Completed"].map((status) => (
+          <divclassName="col-md-4"key={status}>
+            <divclassName="card mb-4">
+              <divclassName="card-header">
+                <h5>{status} Tasks</h5>
+              </div>
+              <divclassName="card-body">
+                {tasks.filter(task=>task.status === status).map((task) => (
+                  <TaskCard
+                    key={task._id}
+                    task={task}
+                    onUpdateStatus={updateTaskStatus}
+                    onDelete={deleteTask}
+                  />
+                ))}
+                {tasks.filter(task=>task.status === status).length === 0&& (
+                  <pclassName="text-muted">No tasks in this category.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+constTaskCard=({ task, onUpdateStatus, onDelete }) => {
+  return (
+    <divclassName="card mb-2">
+      <divclassName="card-body">
+        <h6className="card-title">{task.title}</h6>
+        <pclassName="card-text">Status: {task.status}</p>
+        <divclassName="btn-group"role="group">
+          {task.status !== "Ongoing"&& (
+            <button
+              className="btnbtn-info"
+              onClick={() =>onUpdateStatus(task._id, "Ongoing")}
+            >
+              Mark as Ongoing
+            </button>
+          )}
+          {task.status !== "Completed"&& (
+            <button
+              className="btnbtn-success"
+              onClick={() =>onUpdateStatus(task._id, "Completed")}
+            >
+              Mark as Completed
+            </button>
+          )}
+          <buttonclassName="btnbtn-danger"onClick={() =>onDelete(task._id)}>
+            Delete Task
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
+exportdefaultApp;
